@@ -1231,6 +1231,14 @@ class GLMCV(object):
         default: 0
     verbose: boolean or int
         default: False
+    return_CV_scores: boolean
+        if True, stores the scores per CV fold and return them with the glm
+        object
+        default: False
+    return_CV_betas: boolean
+        if True, stores the betas (excluding the intercept) per CV fold and 
+        return them with the glm object
+        default: False
 
     Attributes
     ----------
@@ -1266,7 +1274,8 @@ class GLMCV(object):
                  learning_rate=2e-1, max_iter=1000,
                  tol=1e-6, eta=2.0, score_metric='deviance',
                  fit_intercept=True,
-                 random_state=0, theta=1.0, verbose=False):
+                 random_state=0, theta=1.0, verbose=False,
+                 return_CV_betas=False, return_CV_scores=False):
 
         if reg_lambda is None:
             reg_lambda = np.logspace(np.log(0.5), np.log(0.01), 10,
@@ -1298,6 +1307,9 @@ class GLMCV(object):
         self.score_metric = score_metric
         self.fit_intercept = fit_intercept
         self.random_state = random_state
+        self.return_CV_betas = return_CV_betas
+        self.return_CV_scores = return_CV_scores
+
         self.verbose = verbose
         set_log_level(verbose)
 
@@ -1346,6 +1358,10 @@ class GLMCV(object):
         """
         logger.info('Looping through the regularization path')
         glms, scores = list(), list()
+        if self.return_CV_betas:
+            CV_betas = list()
+        if self.return_CV_scores:
+            CV_scores = list()
         self.ynull_ = np.mean(y)
 
         if not type(int):
@@ -1377,6 +1393,9 @@ class GLMCV(object):
             _tqdm_log('Lambda: %6.4f' % rl)
             glm.reg_lambda = rl
 
+            if self.return_CV_betas:
+                betas_fold = list()
+
             scores_fold = list()
             for fold in range(self.cv):
                 val = cv_splits[fold]
@@ -1389,6 +1408,7 @@ class GLMCV(object):
                 glm.n_iter_ = 0
                 glm.fit(X[train], y[train])
                 scores_fold.append(glm.score(X[val], y[val]))
+                betas_fold.append(glm.beta_ )
             scores.append(np.mean(scores_fold))
 
             if idx == 0:
@@ -1399,6 +1419,14 @@ class GLMCV(object):
             glm.n_iter_ = 0
             glm.fit(X, y)
             glms.append(glm)
+
+            if self.return_CV_betas:
+                CV_betas.append(betas_fold)
+                self.CV_betas_ = CV_betas
+
+            if self.return_CV_scores:
+                CV_scores.append(scores_fold)
+                self.CV_scores = CV_scores
 
         # Update the estimated variables
         if self.score_metric == 'deviance':
